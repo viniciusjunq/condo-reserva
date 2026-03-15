@@ -10,9 +10,9 @@ const router = express.Router();
 ========================= */
 
 router.post("/register", async (req, res) => {
-  const { email, senha, numero_casa } = req.body;
+  const { nome, email, senha, numero_casa } = req.body;
 
-  if (!email || !senha || !numero_casa) {
+  if (!nome || !email || !senha || !numero_casa) {
     return res.status(400).json({ error: "Todos os campos são obrigatórios" });
   }
 
@@ -26,25 +26,16 @@ router.post("/register", async (req, res) => {
       return res.status(400).json({ error: "Email já cadastrado" });
     }
 
-    const existeCasa = await pool.query(
-      "SELECT id FROM moradores WHERE numero_casa = $1",
-      [numero_casa]
-    );
-
-    if (existeCasa.rows.length > 0) {
-      return res.status(400).json({ error: "Número da casa já cadastrado" });
-    }
-
     const senha_hash = await bcrypt.hash(senha, 10);
 
     const novo = await pool.query(
       `
       INSERT INTO moradores
-      (email, senha_hash, numero_casa)
-      VALUES ($1, $2, $3)
-      RETURNING id, email, numero_casa, is_admin, ativo, created_at
+      (nome, email, senha_hash, numero_casa)
+      VALUES ($1, $2, $3, $4)
+      RETURNING id, nome, email, numero_casa, is_admin, ativo, created_at
       `,
-      [email, senha_hash, numero_casa]
+      [nome, email, senha_hash, numero_casa]
     );
 
     return res.status(201).json({
@@ -100,6 +91,7 @@ router.post("/login", async (req, res) => {
       token,
       user: {
         id: user.id,
+        nome: user.nome,
         email: user.email,
         numero_casa: user.numero_casa,
         is_admin: user.is_admin,

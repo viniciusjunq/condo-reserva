@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 export default function CadastroPage() {
+  const [nome, setNome] = useState("");
   const [email, setEmail] = useState("");
   const [senha, setSenha] = useState("");
   const [casa, setCasa] = useState("");
@@ -19,6 +20,7 @@ export default function CadastroPage() {
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
+          nome,
           email,
           senha,
           numero_casa: casa
@@ -52,7 +54,7 @@ export default function CadastroPage() {
 
       localStorage.setItem("token", loginData.token);
       localStorage.setItem("role", loginData.user.is_admin ? "admin" : "morador");
-      localStorage.setItem("nome", loginData.user.numero_casa || "morador");
+      localStorage.setItem("nome", loginData.user.nome || "morador");
 
       window.location.href = "/";
 
@@ -76,6 +78,19 @@ export default function CadastroPage() {
         )}
 
         <form onSubmit={handleCadastro} className="space-y-5">
+
+          <div>
+            <label className="block text-sm text-slate-400 mb-1">
+              Nome
+            </label>
+            <input
+              type="text"
+              value={nome}
+              onChange={(e) => setNome(e.target.value)}
+              className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2"
+              required
+            />
+          </div>
 
           <div>
             <label className="block text-sm text-slate-400 mb-1">

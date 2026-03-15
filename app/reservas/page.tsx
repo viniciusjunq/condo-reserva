@@ -5,7 +5,7 @@ import AuthGuard from "@/componentes/AuthGuard";
 
 export default function ReservasPage() {
   const [dataSelecionada, setDataSelecionada] = React.useState<string>("");
-  const [ocupados, setOcupados] = React.useState<string[]>([]);
+  const [ocupados, setOcupados] = React.useState<{ inicio: string; nome?: string; casa?: string }[]>([]);
   const [modalAberto, setModalAberto] = React.useState(false);
   const [slotSelecionado, setSlotSelecionado] = React.useState<{ inicio: string; fim: string } | null>(null);
   const [nomeReserva, setNomeReserva] = React.useState("");
@@ -149,7 +149,11 @@ export default function ReservasPage() {
 
       const ocup = lista
         .filter((s: any) => s.status === "ocupado")
-        .map((s: any) => s.inicio);
+        .map((s: any) => ({
+          inicio: s.inicio,
+          nome: s.nome,
+          casa: s.casa,
+        }));
 
       setOcupados(ocup);
     } catch (e) {
@@ -278,7 +282,7 @@ export default function ReservasPage() {
                   <span className="bg-slate-500/20 text-slate-300 text-xs px-3 py-1 rounded-full">
                     Encerrado
                   </span>
-                ) : ocupados.includes(slot.inicio) ? (
+                ) : ocupados.some((o) => o.inicio === slot.inicio) ? (
                   <span className="bg-red-500/20 text-red-400 text-xs px-3 py-1 rounded-full">
                     Ocupado
                   </span>
@@ -289,8 +293,15 @@ export default function ReservasPage() {
                 )}
               </div>
 
+              {ocupados.some((o) => o.inicio === slot.inicio) && (
+                <p className="text-xs text-slate-400 mt-2">
+                  {ocupados.find((o) => o.inicio === slot.inicio)?.nome} – Casa{" "}
+                  {ocupados.find((o) => o.inicio === slot.inicio)?.casa}
+                </p>
+              )}
+
               <button
-                disabled={dataIndisponivel() || ocupados.includes(slot.inicio) || slotEncerrado(slot) || bloqueadoAte22h()}
+                disabled={dataIndisponivel() || ocupados.some((o) => o.inicio === slot.inicio) || slotEncerrado(slot) || bloqueadoAte22h()}
                 onClick={() => abrirModalReserva(slot)}
                 className="mt-6 w-full bg-gradient-to-r from-blue-600 to-blue-500 hover:opacity-90 disabled:opacity-40 text-white py-2 rounded-lg font-medium transition"
               >

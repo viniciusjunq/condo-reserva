@@ -33,7 +33,12 @@ export default function LoginPage() {
       // salva token e dados
       localStorage.setItem("token", data.token);
       localStorage.setItem("role", data.user.is_admin ? "admin" : "morador");
-      localStorage.setItem("nome", data.user.nome);
+      if (data.user && data.user.nome) {
+        localStorage.setItem("nome", data.user.nome);
+      } else {
+        // fallback in case backend did not return the name
+        localStorage.setItem("nome", "morador");
+      }
 
       window.location.href = "/";
     } catch (err) {

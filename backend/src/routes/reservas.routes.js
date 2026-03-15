@@ -147,10 +147,10 @@ router.get("/grade", async (req, res) => {
    CRIAR RESERVA
 ========================= */
 router.post("/", auth, async (req, res) => {
-  const { data_reserva, horario_inicio, horario_fim, nome_utilizado } = req.body;
+  const { data_reserva, horario_inicio, horario_fim } = req.body;
 
   try {
-    if (!data_reserva || !horario_inicio || !horario_fim || !nome_utilizado) {
+    if (!data_reserva || !horario_inicio || !horario_fim) {
       return res.status(400).json({ error: "Dados obrigatórios ausentes" });
     }
 
@@ -159,10 +159,6 @@ router.post("/", auth, async (req, res) => {
       return res.status(dateCheck.code).json({ error: dateCheck.error });
     }
 
-    const graceCheck = validateTodayGrace(data_reserva, horario_inicio, 15);
-    if (!graceCheck.ok) {
-      return res.status(graceCheck.code).json({ error: graceCheck.error });
-    }
 
     if (!isValidSlot(horario_inicio, horario_fim)) {
       return res.status(400).json({ error: "Horário inválido (use apenas slots fixos)" });
@@ -207,6 +203,59 @@ router.post("/", auth, async (req, res) => {
       return res.status(400).json({ error: "Você já possui uma reserva neste horário." });
     }
 
+    /* =========================
+       REGRA: UMA RESERVA POR CASA POR DIA
+    ========================= */
+    const sameDay = await pool.query(
+      `
+      SELECT 1
+      FROM reservas
+      WHERE morador_id = $1
+        AND data_reserva = $2
+        AND status = 'ativa'
+      LIMIT 1
+      `,
+      [req.user.id, data_reserva]
+    );
+
+    if (sameDay.rows.length > 0 && !req.user.is_admin) {
+      return res.status(400).json({
+        error: "Cada casa pode ter apenas uma reserva por dia.",
+      });
+    }
+
+    /* =========================
+       REGRA: EVITAR HORÁRIOS CONSECUTIVOS
+    ========================= */
+    const adjacent = await pool.query(
+      `
+      SELECT horario_inicio, horario_fim
+      FROM reservas
+      WHERE morador_id = $1
+        AND data_reserva = $2
+        AND status = 'ativa'
+      `,
+      [req.user.id, data_reserva]
+    );
+
+    const hi = normalizeTime(horario_inicio);
+    const hf = normalizeTime(horario_fim);
+
+    const isAdjacent = adjacent.rows.some((r) => {
+      const start = normalizeTime(r.horario_inicio);
+      const end = normalizeTime(r.horario_fim);
+      return end === hi || start === hf;
+    });
+
+    const permitirDuplo = req.body?.permitir_duplo === true;
+
+    if (isAdjacent && !(req.user.is_admin && permitirDuplo)) {
+      return res.status(400).json({
+        error:
+          "Não é permitido reservar horários consecutivos. Peça ao administrador se precisar de dois horários seguidos.",
+      });
+    }
+
     const conflict = await pool.query(
       `
       SELECT 1
@@ -223,6 +272,13 @@ router.post("/", auth, async (req, res) => {
       return res.status(400).json({ error: "Horário já reservado" });
     }
 
+    const userInfo = await pool.query(
+      `SELECT nome FROM moradores WHERE id = $1`,
+      [req.user.id]
+    );
+
+    const nome_utilizado = userInfo.rows[0]?.nome || "Morador";
+
     const inserted = await pool.query(
       `
       INSERT INTO reservas (
@@ -233,7 +289,14 @@ router.post("/", auth, async (req, res) => {
         horario_fim,
         status
       )
-      VALUES ($1, $2, $3, $4, $5, 'ativa')
+      SELECT $1, $2, $3, $4, $5, 'ativa'
+      WHERE NOT EXISTS (
+        SELECT 1 FROM reservas
+        WHERE data_reserva = $3
+          AND status = 'ativa'
+          AND horario_inicio = $4::time
+          AND horario_fim = $5::time
+      )
       RETURNING *
       `,
       [
@@ -244,6 +307,10 @@ router.post("/", auth, async (req, res) => {
         normalizeTime(horario_fim),
       ]
     );
+
+    if (inserted.rows.length === 0) {
+      return res.status(400).json({ error: "Este horário acabou de ser reservado por outro morador." });
+    }
 
     await notifyAll(
       "Horário reservado",
@@ -311,9 +378,9 @@ router.delete("/:id", auth, async (req, res) => {
         return res.status(500).json({ error: "Erro ao validar horário da reserva." });
       }
 
-      if (diffMin < 30) {
+      if (diffMin < 120) {
         return res.status(400).json({
-          error: "Você só pode cancelar com no mínimo 30 minutos de antecedência.",
+          error: "Você só pode cancelar com no mínimo 2 horas de antecedência.",
         });
       }
     }
@@ -376,6 +443,121 @@ router.delete("/:id", auth, async (req, res) => {
   } catch (err) {
     console.error(err);
     return res.status(500).json({ error: "Erro no servidor" });
+  }
+});
+
+
+/* =========================
+   BLOQUEAR HORÁRIO (ADMIN)
+========================= */
+router.post("/bloquear", auth, async (req, res) => {
+  if (!req.user.is_admin) {
+    return res.status(403).json({ error: "Apenas administradores podem bloquear horários." });
+  }
+
+  const { data_bloqueio, horario_inicio, horario_fim, motivo } = req.body;
+
+  try {
+    if (!data_bloqueio || !horario_inicio || !horario_fim || !motivo) {
+      return res.status(400).json({ error: "Dados obrigatórios ausentes." });
+    }
+
+    await pool.query(
+      `
+      INSERT INTO bloqueios (data_bloqueio, horario_inicio, horario_fim, motivo)
+      VALUES ($1::date, $2::time, $3::time, $4)
+      `,
+      [data_bloqueio, horario_inicio, horario_fim, motivo]
+    );
+
+    await notifyAll(
+      "Horário bloqueado pela administração",
+      `O horário ${horario_inicio}–${horario_fim} do dia ${data_bloqueio} foi bloqueado. Motivo: ${motivo}`
+    );
+
+    return res.json({ message: "Horário bloqueado com sucesso." });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: "Erro ao bloquear horário." });
+  }
+});
+
+/* =========================
+   LISTAR BLOQUEIOS (ADMIN)
+========================= */
+router.get("/bloqueios", auth, async (req, res) => {
+  if (!req.user.is_admin) {
+    return res.status(403).json({ error: "Apenas administradores." });
+  }
+
+  try {
+    const result = await pool.query(
+      `
+      SELECT id, data_bloqueio, horario_inicio, horario_fim, motivo
+      FROM bloqueios
+      ORDER BY data_bloqueio DESC, horario_inicio
+      `
+    );
+
+    return res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: "Erro ao listar bloqueios." });
+  }
+});
+
+/* =========================
+   REMOVER BLOQUEIO (ADMIN)
+========================= */
+router.delete("/bloqueios/:id", auth, async (req, res) => {
+  if (!req.user.is_admin) {
+    return res.status(403).json({ error: "Apenas administradores." });
+  }
+
+  const id = Number(req.params.id);
+
+  try {
+    await pool.query(
+      `
+      DELETE FROM bloqueios
+      WHERE id = $1
+      `,
+      [id]
+    );
+
+    return res.json({ message: "Bloqueio removido." });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: "Erro ao remover bloqueio." });
+  }
+});
+
+/* =========================
+   BLOQUEAR DIA INTEIRO
+========================= */
+router.post("/bloquear-dia", auth, async (req, res) => {
+  if (!req.user.is_admin) {
+    return res.status(403).json({ error: "Apenas administradores." });
+  }
+
+  const { data_bloqueio, motivo } = req.body;
+
+  try {
+    for (const slot of ALLOWED_SLOTS) {
+      await pool.query(
+        `
+        INSERT INTO bloqueios (data_bloqueio, horario_inicio, horario_fim, motivo)
+        VALUES ($1::date, $2::time, $3::time, $4)
+        ON CONFLICT DO NOTHING
+        `,
+        [data_bloqueio, slot.start, slot.end, motivo || "Dia bloqueado"]
+      );
+    }
+
+    return res.json({ message: "Dia inteiro bloqueado." });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: "Erro ao bloquear dia." });
   }
 });
 
