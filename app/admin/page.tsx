@@ -8,6 +8,7 @@ type Slot = {
   inicio: string;
   fim: string;
   bloqueado: boolean;
+  reservado?: boolean;
   motivo?: string;
 };
 
@@ -94,6 +95,7 @@ export default function AdminPage() {
     horariosBase.map((h) => ({
       ...h,
       bloqueado: false,
+      reservado: false,
       motivo: "",
     }))
   );
@@ -239,6 +241,56 @@ export default function AdminPage() {
       setReservas(Array.isArray(reservasData?.reservas) ? reservasData.reservas : []);
       setReclamacoes(Array.isArray(reclamacoesData) ? reclamacoesData : []);
       setNotificacoes(Array.isArray(notificacoesData) ? notificacoesData : []);
+
+      // carregar situação real dos horários (reservado / bloqueado)
+      try {
+        const hoje = new Date().toISOString().split("T")[0];
+
+        const gradeResponse = await fetch(
+          `http://localhost:5001/reservas/grade?data=${hoje}`,
+          {
+            headers: { Authorization: `Bearer ${token}` },
+          }
+        );
+
+        if (gradeResponse.ok) {
+          const lista = await gradeResponse.json();
+
+          const novosSlots = horariosBase.map((h) => {
+            const slotBackend = lista.find(
+              (s: any) => String(s.inicio).slice(0, 5) === h.inicio
+            );
+
+            if (!slotBackend) {
+              return { ...h, bloqueado: false, reservado: false, motivo: "" };
+            }
+
+            if (slotBackend.status === "bloqueado") {
+              return {
+                ...h,
+                bloqueado: true,
+                reservado: false,
+                motivo: "Bloqueio administrativo",
+              };
+            }
+
+            if (slotBackend.status === "ocupado") {
+              return {
+                ...h,
+                bloqueado: false,
+                reservado: true,
+                motivo: "Reservado por morador",
+              };
+            }
+
+            return { ...h, bloqueado: false, reservado: false, motivo: "" };
+          });
+
+          setSlots(novosSlots);
+        }
+      } catch (err) {
+        console.error("Erro ao carregar status dos horários", err);
+      }
     } catch (error) {
       console.error(error);
       setErro("Não foi possível carregar o painel administrativo.");
@@ -751,14 +803,20 @@ export default function AdminPage() {
                     className={`text-xs px-3 py-1 rounded-full ${
                       slot.bloqueado
                         ? "bg-red-500/20 text-red-400"
+                        : slot.reservado
+                        ? "bg-yellow-500/20 text-yellow-400"
                         : "bg-emerald-500/20 text-emerald-400"
                     }`}
                   >
-                    {slot.bloqueado ? "Bloqueado" : "Livre"}
+                    {slot.bloqueado
+                      ? "Bloqueado"
+                      : slot.reservado
+                      ? "Reservado"
+                      : "Livre"}
                   </span>
                 </div>
 
-                {slot.bloqueado && (
+                {(slot.bloqueado || slot.reservado) && (
                   <p className="text-red-300 text-sm mt-4">Motivo: {slot.motivo}</p>
                 )}
 

@@ -209,10 +209,13 @@ router.post("/", auth, async (req, res) => {
     const sameDay = await pool.query(
       `
       SELECT 1
-      FROM reservas
-      WHERE morador_id = $1
-        AND data_reserva = $2
-        AND status = 'ativa'
+      FROM reservas r
+      JOIN moradores m ON m.id = r.morador_id
+      WHERE m.numero_casa = (
+        SELECT numero_casa FROM moradores WHERE id = $1
+      )
+        AND r.data_reserva = $2
+        AND r.status = 'ativa'
       LIMIT 1
       `,
       [req.user.id, data_reserva]
@@ -229,11 +232,14 @@ router.post("/", auth, async (req, res) => {
     ========================= */
     const adjacent = await pool.query(
       `
-      SELECT horario_inicio, horario_fim
-      FROM reservas
-      WHERE morador_id = $1
-        AND data_reserva = $2
-        AND status = 'ativa'
+      SELECT r.horario_inicio, r.horario_fim
+      FROM reservas r
+      JOIN moradores m ON m.id = r.morador_id
+      WHERE m.numero_casa = (
+        SELECT numero_casa FROM moradores WHERE id = $1
+      )
+        AND r.data_reserva = $2
+        AND r.status = 'ativa'
       `,
       [req.user.id, data_reserva]
     );

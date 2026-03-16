@@ -8,6 +8,13 @@ export default function Navbar() {
   const pathname = usePathname();
   const [role, setRole] = useState<string | null>(null);
 
+  function handleLogout() {
+    localStorage.removeItem("token");
+    localStorage.removeItem("role");
+    localStorage.removeItem("nome");
+    window.location.href = "/login";
+  }
+
   useEffect(() => {
     setRole(localStorage.getItem("role"));
   }, []);
@@ -34,7 +41,16 @@ export default function Navbar() {
           <Link className={linkClass("/reservas")} href="/reservas">Reservas</Link>
           <Link className={linkClass("/minhas")} href="/minhas-reservas">Minhas Reservas</Link>
           <Link className={linkClass("/regras")} href="/regras">Regras e Informações</Link>
-          <Link className={linkClass("/login")} href="/login">Login</Link>
+          {!role ? (
+            <Link className={linkClass("/login")} href="/login">Login</Link>
+          ) : (
+            <button
+              onClick={handleLogout}
+              className="transition hover:text-white text-slate-300"
+            >
+              Logout
+            </button>
+          )}
 
           {/* Só aparece se for admin */}
           {role === "admin" && (

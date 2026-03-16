@@ -4,13 +4,25 @@ import React from "react";
 import AuthGuard from "@/componentes/AuthGuard";
 
 export default function ReservasPage() {
-  const [dataSelecionada, setDataSelecionada] = React.useState<string>("");
+  const hoje = new Date().toISOString().split("T")[0];
+  const [dataSelecionada, setDataSelecionada] = React.useState<string>(hoje);
   const [ocupados, setOcupados] = React.useState<{ inicio: string; nome?: string; casa?: string }[]>([]);
+  const [bloqueados, setBloqueados] = React.useState<string[]>([]);
+  const [isAdmin, setIsAdmin] = React.useState(false);
   const [modalAberto, setModalAberto] = React.useState(false);
   const [slotSelecionado, setSlotSelecionado] = React.useState<{ inicio: string; fim: string } | null>(null);
   const [nomeReserva, setNomeReserva] = React.useState("");
   const [carregandoReserva, setCarregandoReserva] = React.useState(false);
   const [mensagem, setMensagem] = React.useState<{ tipo: "sucesso" | "erro"; texto: string } | null>(null);
+
+  React.useEffect(() => {
+    const role = localStorage.getItem("role");
+    setIsAdmin(role === "admin");
+
+    const hoje = new Date().toISOString().split("T")[0];
+    setDataSelecionada(hoje);
+    carregarGrade(hoje);
+  }, []);
 
   function gerarHorarios() {
     const horarios = [];
@@ -155,7 +167,12 @@ export default function ReservasPage() {
           casa: s.casa,
         }));
 
+      const bloq = lista
+        .filter((s: any) => s.status === "bloqueado")
+        .map((s: any) => s.inicio);
+
       setOcupados(ocup);
+      setBloqueados(bloq);
     } catch (e) {
       console.warn("Erro ao carregar grade");
       setOcupados([]);
@@ -206,6 +223,30 @@ export default function ReservasPage() {
       setMensagem({ tipo: "erro", texto: "Erro ao conectar ao servidor." });
     } finally {
       setCarregandoReserva(false);
+    }
+  }
+
+  async function bloquearHorario(slot: { inicio: string; fim: string }) {
+    const token = localStorage.getItem("token");
+
+    try {
+      await fetch("http://localhost:5001/reservas/bloquear", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          data_bloqueio: dataSelecionada,
+          horario_inicio: slot.inicio,
+          horario_fim: slot.fim,
+          motivo: "Bloqueio administrativo",
+        }),
+      });
+
+      await carregarGrade(dataSelecionada);
+    } catch {
+      setMensagem({ tipo: "erro", texto: "Erro ao bloquear horário." });
     }
   }
 
@@ -282,6 +323,10 @@ export default function ReservasPage() {
                   <span className="bg-slate-500/20 text-slate-300 text-xs px-3 py-1 rounded-full">
                     Encerrado
                   </span>
+                ) : bloqueados.includes(slot.inicio) ? (
+                  <span className="bg-yellow-500/20 text-yellow-300 text-xs px-3 py-1 rounded-full">
+                    Bloqueado
+                  </span>
                 ) : ocupados.some((o) => o.inicio === slot.inicio) ? (
                   <span className="bg-red-500/20 text-red-400 text-xs px-3 py-1 rounded-full">
                     Ocupado
@@ -301,12 +346,20 @@ export default function ReservasPage() {
               )}
 
               <button
-                disabled={dataIndisponivel() || ocupados.some((o) => o.inicio === slot.inicio) || slotEncerrado(slot) || bloqueadoAte22h()}
+                disabled={dataIndisponivel() || ocupados.some((o) => o.inicio === slot.inicio) || bloqueados.includes(slot.inicio) || slotEncerrado(slot) || bloqueadoAte22h()}
                 onClick={() => abrirModalReserva(slot)}
                 className="mt-6 w-full bg-gradient-to-r from-blue-600 to-blue-500 hover:opacity-90 disabled:opacity-40 text-white py-2 rounded-lg font-medium transition"
               >
                 Reservar
               </button>
+              {isAdmin && !bloqueados.includes(slot.inicio) && !ocupados.some((o) => o.inicio === slot.inicio) && (
+                <button
+                  onClick={() => bloquearHorario(slot)}
+                  className="mt-2 w-full bg-red-600 hover:opacity-90 text-white py-2 rounded-lg text-sm"
+                >
+                  Bloquear horário
+                </button>
+              )}
             </div>
           ))}
         </div>
