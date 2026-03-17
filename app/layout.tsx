@@ -1,9 +1,15 @@
+import type { Metadata } from "next";
 import "./globals.css";
 import Navbar from "../componentes/Navbar";
 
-export const metadata = {
+export const metadata: Metadata = {
   title: "Boulevard Elegance",
   description: "Sistema de Reservas da Quadra",
+  manifest: "/manifest.json",
+  icons: {
+    icon: "/icon-192.png",
+    apple: "/icon-192.png"
+  }
 };
 
 export default function RootLayout({

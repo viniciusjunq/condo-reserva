@@ -19,7 +19,6 @@ router.post("/", auth, async (req, res) => {
         .json({ error: "titulo e mensagem são obrigatórios" });
     }
 
-    // ✅ garante que descricao nunca vai NULL (e não quebra o NOT NULL)
     const descricaoFinal =
       descricao && String(descricao).trim() ? descricao : mensagem;
 
@@ -78,7 +77,7 @@ router.get("/admin", auth, async (req, res) => {
       `
       SELECT
         r.id, r.titulo, r.descricao, r.mensagem, r.foto_url, r.status, r.created_at, r.resolvida_em,
-        m.numero_casa, m.email
+        m.nome, m.numero_casa, m.email
       FROM reclamacoes r
       JOIN moradores m ON m.id = r.morador_id
       ORDER BY r.created_at DESC

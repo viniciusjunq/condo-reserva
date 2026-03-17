@@ -203,6 +203,14 @@ export default function HomePage() {
             </div>
           </Link>
 
+          <Link href="/reclamacoes" className="group">
+            <div className="h-full bg-slate-900/60 border border-slate-800 rounded-2xl p-6 hover:border-blue-500 transition">
+              <div className="text-3xl">📝</div>
+              <h2 className="text-xl font-semibold mt-4 group-hover:text-blue-300 transition">Reclamações</h2>
+              <p className="text-slate-400 mt-2">Envie uma mensagem diretamente para a administração do condomínio.</p>
+            </div>
+          </Link>
+
           {role === "admin" ? (
             <Link href="/admin" className="group">
               <div className="h-full bg-slate-900/60 border border-blue-600/50 rounded-2xl p-6 hover:border-blue-400 transition">
